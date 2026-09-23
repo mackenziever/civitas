@@ -20,6 +20,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from living_server.day_loop import run_day_loop
 from metrics.collector import GLOBAL_COLLECTOR
+from production.loop import ProductionEngine
 
 _VIEWER_DIR = Path(__file__).resolve().parents[1] / "viewer"
 _LIVE_HTML = _VIEWER_DIR / "living_city_live.html"
@@ -35,6 +36,7 @@ class LivingState:
         self.subscribers: list[WebSocket] = []
         self.last_cognitive: list[dict] = []
         self.loop_result: dict | None = None
+        self.production_engine = ProductionEngine()
 
 
 STATE = LivingState()
@@ -164,6 +166,42 @@ async def agent_one(request: Request):
 
 async def thoughts(_request: Request):
     return JSONResponse({"ok": True, "cognitive": STATE.last_cognitive[-50:]})
+
+
+async def production_run(request: Request):
+    if STATE.engine is None:
+        return JSONResponse({"ok": False, "error": "engine_not_ready"}, status_code=503)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "invalid_body"}, status_code=400)
+    record, err = STATE.production_engine.run(STATE.engine, STATE.tick, body)
+    if err == "busy":
+        return JSONResponse({"ok": False, "error": "busy"}, status_code=409)
+    assert record is not None
+    return JSONResponse({"ok": True, "run": record.as_dict()})
+
+
+async def production_recent(request: Request):
+    limit = 20
+    try:
+        q = request.query_params.get("limit")
+        if q is not None:
+            limit = int(q)
+    except (TypeError, ValueError):
+        limit = 20
+    rows = STATE.production_engine.recent(limit)
+    return JSONResponse(
+        {
+            "ok": True,
+            "runs": [r.as_dict() for r in rows],
+            "busy": STATE.production_engine.busy,
+        }
+    )
 
 
 async def city_state(_request: Request):
@@ -488,6 +526,8 @@ def create_app(engine=None) -> Starlette:
         Route("/v1/agents", agents_list),
         Route("/v1/agents/{agent_id}", agent_one),
         Route("/v1/thoughts", thoughts),
+        Route("/v1/production/run", production_run, methods=["POST"]),
+        Route("/v1/production/recent", production_recent),
         Route("/v1/city", city_state),
         Route("/live", live_city),
         Route("/", panel),
