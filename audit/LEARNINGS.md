@@ -15,3 +15,9 @@
 - `CIVITAS_REPLAY=1` freezes upserts (HTTP 423). Agent writes flush in a **sorted batch at end of tick**.
 - Hash embedder = wiring/determinism tests only; semantic quality needs real `/v1/embeddings` with fixed float precision (~6 decimals).
 - CI covers the chat-completion-compatible path via stdlib mock (`tests/test_mock_llm_ci.py`) without pulling GHCR.
+
+## 2026-09-24 — Production loop MVP
+
+- `production/` — produce landing (`vault/08-PORTFOLIO/`) → rubric Awwwards-ish → critique in `vault/04-LEARNINGS/`.
+- OPS: `POST /v1/production/run`, `GET /v1/production/recent` on Living :9300; script `scripts/run_production_loop.py`.
+- Golden rubric fixture: `tests/fixtures/portfolio/golden_landing/`.
